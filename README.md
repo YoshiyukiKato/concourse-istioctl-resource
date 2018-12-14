@@ -36,7 +36,9 @@ Deploys istio configuration onto the Kubernetes cluster. Istio must be already i
 on the cluster.
 
 #### Parameters
-* `configuration`: *Required.* path to istio configuration file
+* `configurations`: *Required.* list of istio configuration. Either `path` or `value` is required.
+  * `path`: path to config file
+  * `value`: raw configuration
 * `delete`: *Optional.* set if to delete deployment corresponding to the configuration
 
 ## Example
@@ -64,5 +66,6 @@ jobs:
   plan:
   - put: istio-deploy
     params:
-      configuraction: path/to/istio-config.yaml
+      configurations:
+      - path: path/to/istio-config.yaml
 ```
