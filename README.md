@@ -37,6 +37,7 @@ on the cluster.
 
 #### Parameters
 * `configuration`: *Required.* path to istio configuration file
+* `delete`: *Optional.* set if to delete deployment corresponding to the configuration
 
 ## Example
 
