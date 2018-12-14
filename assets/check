@@ -9,7 +9,7 @@ exec 1>&2 # redirect all output to stderr for logging
 source /opt/resource/common.sh
 
 # Read inputs
-payload=$(mktemp $TMPDIR/kubectl-resource-request.XXXXXX)
+payload=$(mktemp $TMPDIR/istioctl-resource-request.XXXXXX)
 cat > $payload <&0
 
 # Prepare

@@ -18,45 +18,40 @@ setup_resource $payload $source
 echo "Resource setup successful."
 
 # Parse parameters
-configurations=<(jq -j '.params.configurations[]? | if .key and (.value or .path) then (.key, .value // "", .path // "", .hide // false, .type) else empty end | tostring + "\u0000"'  < $payload)
 delete=$(jq -r '.params.delete // "false"' < $payload)
 
 deploy_each(){
   if [ $1 = 'delete' ]; then
-    istioctl_deploy=$istioctl_delete
+    istioctl_deploy=istioctl_delete
   else
-    istioctl_deploy=$istioctl_apply
+    istioctl_deploy=istioctl_apply
   fi
 
-  while read -r -d '' key && read -r -d '' value && read -r -d '' path && read -r -d '' hidden && read -r -d '' type; do
-    if [ -n "$path" ]; then
-      value="$(< "-f $source/$path")"
-    fi
-
-    scrubbed_value="$value"
-    if [ "$hidden" != 'false' ]; then
-      scrubbed_value='***HIDDEN***'
-    fi
-    
-    istioctl_deploy($value, $scrubbed_value)
-  done < $configurations
+  while read -r -d '' path && read -r -d '' type; do
+    config_path="$source/$path"
+    $istioctl_deploy $config_path $scrubbed_value
+  done < <(jq -j '.params.configurations[]? | if .path then (.path // "", .type) else empty end | tostring + "\u0000"'  < $payload)
 }
 
 istioctl_apply() {
   ## pass configuration to 1st arg
-  echo "Creating the configuration $1..."
   logfile="/tmp/log"
   mkdir -p /tmp
-  create_cmd=("istioctl" "create" "$1")
-  echo "Running command istioctl ${create_cmd[@]}"
-  create_error=$(("${create_cmd[@]} | tee $logfile") 2>&1)
-
+  create_cmd=("create" "-f" "$1")
+  echo "Running command ${create_cmd[@]}"
+  
+  set +e
+  create_error=$(istioctl "${create_cmd[@]}" 2>&1 | tee $logfile)
+  echo $create_error
+  
   if [[ $create_error =~ ^Error:( ).+( )already( )exists$ ]]; then
     echo "Create with $1 failed because resource already exists"
-    replace_cmd=("istioctl" "replace" "$1")
+    replace_cmd=("replace" "-f" "$1")
     echo "Running command ${replace_cmd[@]}"
-    $("${replace_cmd[@]} | tee $logfile")
+    replace_error=$(istioctl "${replace_cmd[@]}" 2>&1 | tee $logfile)
+    echo $replace_error
   fi
+  set -e
 }
 
 istioctl_delete() {
@@ -68,20 +63,25 @@ istioctl_delete() {
 
   logfile="/tmp/log"
   mkdir -p /tmp
-  delete_cmd=("istioctl" "delete" "$1")
+  delete_cmd=("delete" "-f" "$1")
   echo "Running command ${delete_cmd[@]}"
-  $("${delete_cmd[@]} | tee $logfile")
+
+  set +e
+  delete_error=$(istioctl "${delete_cmd[@]}" 2>&1 | tee $logfile)
+  echo $delete_error
+  set -e
 }
 
 if [ "$delete" = true ]; then
-  echo "Deleting $configurations"
-  exec_each("delete")
-  result="$(jq -n "{version:{configurations:\"$configurations\", deleted: \"true\"}, metadata: [{name: \"configurations\", value: \"$configurations\"}]}")"
-  echo "$result" | jq -s add  >&3
+  echo "Deleting configurations"
+  deploy_each "delete"
+  #result="$(jq -n "{version:{configurations:\"$configurations\", deleted: \"true\"}, metadata: [{name: \"configurations\", value: \"$configurations\"}]}")"
+  #echo "$result" | jq -s add  >&3
+  echo '{"version":{"ref":"none"}}'
 else
-  echo "Applying $configurations"
-  exec_each("apply")
-  echo "Deployed $configurations"
-  result="$(jq -n "{version:{configurations:\"$configurations\"}, metadata: [{name: \"configurations\", value: \"$configurations\"}]}")"
-  echo "$result" | jq -s add  >&3
+  echo "Applying configurations"
+  deploy_each "apply"
+  #result="$(jq -n "{version:{configurations:\"$configurations\"}, metadata: [{name: \"configurations\", value: \"$configurations\"}]}")"
+  #echo "$result" | jq -s add  >&3
+  echo '{"version":{"ref":"none"}}'
 fi
