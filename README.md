@@ -36,7 +36,7 @@ Deploys istio configuration onto the Kubernetes cluster. Istio must be already i
 on the cluster.
 
 #### Parameters
-* `configuration`: *Required.* Either the file containing the helm configuration to deploy (ends with .tgz) or the name of the configuration (e.g. `stable/mysql`).
+* `configuration`: *Required.* path to istio configuration file
 
 ## Example
 
