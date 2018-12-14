@@ -18,49 +18,70 @@ setup_resource $payload $source
 echo "Resource setup successful."
 
 # Parse parameters
-configuration=$(jq -r '.params.configuration // ""' < $payload)
+configurations=<(jq -j '.params.configurations[]? | if .key and (.value or .path) then (.key, .value // "", .path // "", .hide // false, .type) else empty end | tostring + "\u0000"'  < $payload)
 delete=$(jq -r '.params.delete // "false"' < $payload)
 
-istioctl_create() {
-  echo "Creating the configuration $configuration..."
-  config_args=("-f" "$source/$configuration")
+deploy_each(){
+  if [ $1 = 'delete' ]; then
+    istioctl_deploy=$istioctl_delete
+  else
+    istioctl_deploy=$istioctl_apply
+  fi
+
+  while read -r -d '' key && read -r -d '' value && read -r -d '' path && read -r -d '' hidden && read -r -d '' type; do
+    if [ -n "$path" ]; then
+      value="$(< "-f $source/$path")"
+    fi
+
+    scrubbed_value="$value"
+    if [ "$hidden" != 'false' ]; then
+      scrubbed_value='***HIDDEN***'
+    fi
+    
+    istioctl_deploy($value, $scrubbed_value)
+  done < $configurations
+}
+
+istioctl_apply() {
+  ## pass configuration to 1st arg
+  echo "Creating the configuration $1..."
   logfile="/tmp/log"
   mkdir -p /tmp
-  create_args=("create ${config_args[@]} | tee $logfile")
-  echo "Running command istioctl ${create_args[@]}"
-  create_error=$(("istioctl ${create_args[@]}") 2>&1)
+  create_cmd=("istioctl" "create" "$1")
+  echo "Running command istioctl ${create_cmd[@]}"
+  create_error=$(("${create_cmd[@]} | tee $logfile") 2>&1)
 
   if [[ $create_error =~ ^Error:( ).+( )already( )exists$ ]]; then
-    echo "Create with $configuration failed because resource already exists"
-    replace_args=("replace ${config_args[@]} | tee $logfile")
-    echo "Running command istioctl ${replace_args}"
-    replace_result=$("istioctl ${replace_args[@]}")
+    echo "Create with $1 failed because resource already exists"
+    replace_cmd=("istioctl" "replace" "$1")
+    echo "Running command ${replace_cmd[@]}"
+    $("${replace_cmd[@]} | tee $logfile")
   fi
 }
 
 istioctl_delete() {
-  if [ -z "$configuration" ]; then
+  ## pass configuration to 1st arg
+  if [ -z "$1" ]; then
     echo "invalid payload (missing  if delete=true)"
     exit 1
   fi
 
-  echo "Deleting the configuration $configuration..."
-  delete_args=("delete" "-f" "$source/$configuration")
   logfile="/tmp/log"
   mkdir -p /tmp
-  echo "Running command istioctl ${delete_args[@]} | tee $logfile"
-  istioctl "${delete_args[@]}" | tee $logfile
+  delete_cmd=("istioctl" "delete" "$1")
+  echo "Running command ${delete_cmd[@]}"
+  $("${delete_cmd[@]} | tee $logfile")
 }
 
 if [ "$delete" = true ]; then
-  istioctl_delete
-  result="$(jq -n "{version:{configuration:\"$configuration\", deleted: \"true\"}, metadata: [{name: \"configuration\", value: \"$configuration\"}]}")"
+  echo "Deleting $configurations"
+  exec_each("delete")
+  result="$(jq -n "{version:{configurations:\"$configurations\", deleted: \"true\"}, metadata: [{name: \"configurations\", value: \"$configurations\"}]}")"
   echo "$result" | jq -s add  >&3
 else
-  echo "Applying $configuration"
-  istioctl_create
-
-  echo "Deployed $configuration"
-  result="$(jq -n "{version:{configuration:\"$configuration\"}, metadata: [{name: \"configuration\", value: \"$configuration\"}]}")"
+  echo "Applying $configurations"
+  exec_each("apply")
+  echo "Deployed $configurations"
+  result="$(jq -n "{version:{configurations:\"$configurations\"}, metadata: [{name: \"configurations\", value: \"$configurations\"}]}")"
   echo "$result" | jq -s add  >&3
 fi
