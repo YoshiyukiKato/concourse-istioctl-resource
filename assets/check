@@ -15,4 +15,4 @@ cat > $payload <&0
 # Prepare
 setup_resource $payload
 echo "Resource setup successful."
-echo '{"version":{"ref":"none"}}' | jq -s add >&3
+echo '{"version":{"ref":"none"},"metadata":[]}' | jq -s add >&3

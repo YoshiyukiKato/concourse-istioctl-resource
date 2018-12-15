@@ -77,11 +77,11 @@ if [ "$delete" = true ]; then
   deploy_each "delete"
   #result="$(jq -n "{version:{configurations:\"$configurations\", deleted: \"true\"}, metadata: [{name: \"configurations\", value: \"$configurations\"}]}")"
   #echo "$result" | jq -s add  >&3
-  echo '{"version":{"ref":"none"}}' | jq -s add >&3
+  echo '{"version":{"ref":"none"},"metadata":[]}' | jq -s add >&3
 else
   echo "Applying configurations"
   deploy_each "apply"
   #result="$(jq -n "{version:{configurations:\"$configurations\"}, metadata: [{name: \"configurations\", value: \"$configurations\"}]}")"
   #echo "$result" | jq -s add  >&3
-  echo '{"version":{"ref":"none"}}' | jq -s add >&3
+  echo '{"version":{"ref":"none"},"metadata":[]}' | jq -s add >&3
 fi
